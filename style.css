@@ -1,0 +1,49 @@
+:root {
+  --bg-1: #ffffff;
+  --bg-2: #ffffff;
+  --panel: rgb(255, 255, 255);
+  --panel-border: #111111;
+  --text: #111111;
+  --muted: #555555;
+  --accent: #111111;
+  --accent-2: #444444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  height: 100vh;
+  width: 100vw;
+  display: grid;
+  place-items: center;
+}
+
+.game-shell {
+  /* Fill the viewport while preserving the canvas's 960x540 (16:9) aspect
+     ratio: whichever dimension is tighter (width vs. height) wins, and the
+     other is derived from it via the ratio, so the two never disagree. */
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  background: var(--bg-1);
+  overflow: hidden;
+}
+
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  cursor: pointer;
+  touch-action: none;
+}
