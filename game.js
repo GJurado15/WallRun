@@ -284,17 +284,25 @@ function drawDigitSequence(targetCtx, keys, x, yBottom, glyphHeight, gap) {
 
 const track = {
   groundY: canvas.height+5,
-  distMin: 500,
-  distMax: 1400,
+  distMin: 60,
+  distMax: 150,
   wallTopY: 40,
 };
 
 const WALL_ASPECT = EXPLICIT_CROPS.wall.sh / EXPLICIT_CROPS.wall.sw;
 const WALL_START_WIDTH = 90;
-// At impact (progress === 1) the wall must fully cover the canvas, since
-// that's now the game's actual end condition — see getWallRect(). A small
-// overscan margin avoids a 1px sliver of white at the edges from rounding.
+// This is the wall's width at rawProgress === 1, which the game never
+// actually reaches anymore (see IMPACT_TRIGGER_WIDTH_FRACTION below) — it
+// only still matters as the curve's asymptote, i.e. how large the wall
+// *would* get if a run somehow ran all the way out. Kept wider than the
+// canvas (a small overscan margin) so that if it ever were reached, it'd
+// fully cover the canvas with no rounding sliver at the edges.
 const WALL_IMPACT_WIDTH = canvas.width + 20;
+// The run actually ends once the wall's rendered width crosses this
+// fraction of canvas.width — a bit before it fully bleeds off-canvas, so
+// impact lands while the wall is large and dominant but a sliver of
+// background is still visible around it (see update()).
+const IMPACT_TRIGGER_WIDTH_FRACTION = 0.85;
 // Parallax: the wall shifts opposite state.lateralX (as if it's the camera
 // panning while strafing, not the wall itself moving), growing stronger as
 // the wall grows closer. getWallRect() clamps this once the wall is wide
@@ -303,10 +311,18 @@ const WALL_PARALLAX_FACTOR = 0.35;
 
 const SPRITE_WIDTH = 200;
 const NUDGE_SPEED = 90;
-const REVERSE_MAX_SPEED = 180;
-const REVERSE_ACCEL = -350;
-const BASE_SPRINT_ACCEL = 450;
-const BASE_MAX_SPEED = 420;
+// Scaled down (~1/6) from an earlier, deliberately-arcadey 420 cap to a more
+// realistic top speed — every constant below is scaled together so the
+// timing/feel (how fast you ramp up, how fast releasing decays) stays the
+// same, just on a smaller MPH number. DRAG_REFERENCE_SPEED is the "220" the
+// drag term (below, in update()) divides speed by; ACTIVE_DRAG/IDLE_DRAG are
+// coefficients on that already-scale-invariant ratio, so they don't need to
+// change too.
+const REVERSE_MAX_SPEED = 30;
+const REVERSE_ACCEL = -58;
+const BASE_SPRINT_ACCEL = 75;
+const BASE_MAX_SPEED = 70;
+const DRAG_REFERENCE_SPEED = 37;
 const ACTIVE_DRAG = 28;
 const IDLE_DRAG = 160;
 // Randomized per run so the achievable top speed (and how fast you get
@@ -388,7 +404,7 @@ function update(dt) {
     drag = sprintBoost ? ACTIVE_DRAG : IDLE_DRAG;
   }
 
-  state.speed += (acceleration - drag * (state.speed / 220)) * dt;
+  state.speed += (acceleration - drag * (state.speed / DRAG_REFERENCE_SPEED)) * dt;
   state.speed = clamp(state.speed, -REVERSE_MAX_SPEED, BASE_MAX_SPEED * state.accelScale);
   state.maxSpeed = Math.max(state.maxSpeed, state.speed);
 
@@ -401,8 +417,11 @@ function update(dt) {
   const nudge = (state.nudgeRight ? 1 : 0) - (state.nudgeLeft ? 1 : 0);
   state.lateralX = clamp(state.lateralX + nudge * NUDGE_SPEED * dt, -220, 220);
 
-  if (state.traveled >= state.startDistance) {
-    state.traveled = state.startDistance;
+  // Trigger impact once the wall's on-screen width crosses a threshold
+  // rather than waiting for it to fully bleed off-canvas — this ends the
+  // run a bit before "full coverage", while the wall is still large and
+  // dominant but hasn't completely swallowed the screen yet.
+  if (state.traveled > 0 && getWallRect().width >= canvas.width * IMPACT_TRIGGER_WIDTH_FRACTION) {
     state.speed = Math.max(state.speed, 0);
     finishRun();
   }
@@ -418,8 +437,8 @@ function getWallProgress() {
 // Growth curve for the wall's size/parallax: raising linear progress to a
 // power > 1 eases it in, so the wall barely grows at first and then balloons
 // toward the end (exponential-feeling) instead of growing at a constant
-// rate with distance covered. This is purely visual — state.traveled vs.
-// state.startDistance (the actual finishRun() trigger) stays linear.
+// rate with distance covered. This is purely visual — getWallProgress()
+// itself (state.traveled / state.startDistance) stays linear.
 const WALL_GROWTH_EXPONENT = 2.5;
 // How far below WALL_START_WIDTH the wall can shrink while walking
 // backward, as a fraction of it (never quite to zero, so there's always a
@@ -428,11 +447,13 @@ const WALL_MIN_SHRINK_SCALE = 0.15;
 
 // The wall is drawn as a plain axis-aligned rectangle (no shear/rotation),
 // so it always keeps square, 90-degree corners as it scales up. It grows
-// from WALL_START_WIDTH up to WALL_IMPACT_WIDTH (which fully covers the
-// canvas) as progress goes 0 -> 1, so "wall fills the window" and "run
-// ends" are the same moment by construction. Below 0 (walked backward past
-// the start) it instead shrinks smaller than WALL_START_WIDTH, continuously
-// — both branches agree exactly at progress === 0, so there's no jump.
+// from WALL_START_WIDTH toward WALL_IMPACT_WIDTH as progress goes 0 -> 1,
+// though in practice a run always ends earlier, once the width crosses
+// IMPACT_TRIGGER_WIDTH_FRACTION of the canvas (see update()) — so the wall
+// is still large and dominant at impact, but hasn't gone fully edge-to-edge.
+// Below 0 (walked backward past the start) it instead shrinks smaller than
+// WALL_START_WIDTH, continuously — both branches agree exactly at
+// progress === 0, so there's no jump.
 function getWallRect() {
   const rawProgress = getWallProgress();
   const forwardEased = rawProgress > 0 ? Math.min(rawProgress, 1) ** WALL_GROWTH_EXPONENT : 0;
@@ -492,7 +513,7 @@ function drawRunner() {
 
   const crop = getCrop(spriteImage, 'sprite');
   const spriteHeight = Math.round(SPRITE_WIDTH * (crop.sh / crop.sw));
-  const bob = state.speed > 0 ? Math.sin(state.time * 18) * 3 : 0;
+  const bob = state.speed > 0 ? Math.sin(state.time * 26) * 3 : 0;
   const dx = canvas.width / 2 + state.lateralX - SPRITE_WIDTH / 2;
   const dy = track.groundY - spriteHeight + bob;
 
@@ -546,7 +567,9 @@ function drawImpactScreen() {
 
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
-  const explosionWidth = 456;
+  // explosion.png (and every impact-word PNG) is a square 1:1 canvas, so
+  // sizing to canvas.height here makes it fill the screen top-to-bottom.
+  const explosionWidth = canvas.height;
 
   if (explosionMaskCanvas) {
     ctx.drawImage(explosionMaskCanvas, centerX - explosionWidth / 2, centerY - explosionWidth / 2, explosionWidth, explosionWidth);
@@ -557,7 +580,10 @@ function drawImpactScreen() {
 
   const wordImg = impactWordImages[state.impactWordKey];
   if (wordImg) {
-    drawImageCentered(wordImg, state.impactWordKey, 264, centerX, centerY);
+    // Keep the word's previous proportion relative to the explosion (was
+    // 264/456) rather than a fixed pixel size, so it scales together with it.
+    const wordWidth = explosionWidth * (264 / 456);
+    drawImageCentered(wordImg, state.impactWordKey, wordWidth, centerX, centerY);
   }
 }
 
