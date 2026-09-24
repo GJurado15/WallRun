@@ -29,6 +29,12 @@ playAgainImage.src = 'assets/play%20again.png';
 const startImage = new Image();
 startImage.src = 'assets/start.png';
 
+// Alternates with startImage on the start screen (see drawStartScreen()) as
+// a blinking cue that the graphic is clickable.
+const startFlashImage = new Image();
+startFlashImage.src = 'assets/start%20with%20flash.png';
+const START_FLASH_INTERVAL_MS = 500;
+
 const explosionImage = new Image();
 // explosion.png is a hand-drawn outline only (transparent interior, no
 // vector path data), so a plain drawImage() doesn't cover anything behind
@@ -615,9 +621,16 @@ function drawStartScreen() {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // Blink between the plain and "flash" graphics on a wall-clock timer
+  // (not state.time, which is frozen at 0 while !state.running) so it
+  // reads as "click me" even before any run has started.
+  const flashing = Math.floor(performance.now() / START_FLASH_INTERVAL_MS) % 2 === 0;
+  const img = flashing ? startFlashImage : startImage;
+  const key = flashing ? 'startFlash' : 'start';
+
   const startWidth = 320;
   const startTopY = canvas.height / 2 - 60;
-  const startHeight = drawImageFit(startImage, 'start', startWidth, canvas.width / 2, startTopY);
+  const startHeight = drawImageFit(img, key, startWidth, canvas.width / 2, startTopY);
   activeButtonRect = {
     x: canvas.width / 2 - startWidth / 2,
     y: startTopY,
@@ -725,6 +738,12 @@ function releasePointerControl(event) {
 canvas.addEventListener('pointerup', releasePointerControl);
 canvas.addEventListener('pointercancel', releasePointerControl);
 canvas.addEventListener('pointerleave', releasePointerControl);
+
+// Some mobile browsers fire a synthetic contextmenu on a held touch (the
+// D-pad buttons are held, not tapped) — block it, along with the CSS
+// touch-callout/user-select rules in style.css, so a long press on the
+// canvas never pops a native menu/selection mid-input.
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
 render();
 requestAnimationFrame(loop);

@@ -46,4 +46,11 @@ body {
   background: #ffffff;
   cursor: pointer;
   touch-action: none;
+  /* Holding a D-pad button is a long-press: without these, iOS Safari pops
+     its callout (copy/share) menu and Android can select/highlight the
+     canvas, both of which interrupt the held touch mid-input. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
