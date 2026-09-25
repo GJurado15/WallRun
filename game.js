@@ -128,6 +128,13 @@ IMPACT_WORD_KEYS.forEach((key) => {
   impactWordImages[key] = img;
 });
 
+// Looping footstep sound while actively sprinting (see update()), and a
+// one-shot punch sound at the moment of impact (see finishRun()).
+const runningSound = new Audio('assets/running.wav');
+runningSound.loop = true;
+
+const impactSound = new Audio('assets/impact.wav');
+
 // Mobile/touch on-screen D-pad, shown during gameplay only.
 const arrowImages = {
   up: new Image(),
@@ -380,6 +387,9 @@ function startRun() {
   state.time = 0;
   state.speed = 0;
   state.maxSpeed = 0;
+
+  runningSound.pause();
+  runningSound.currentTime = 0;
 }
 
 function finishRun() {
@@ -390,6 +400,10 @@ function finishRun() {
   // Nothing is clickable during the impact flash; drawResultsScreen() sets
   // this again once we actually reach the results screen.
   activeButtonRect = null;
+
+  runningSound.pause();
+  impactSound.currentTime = 0;
+  impactSound.play().catch(() => {});
 }
 
 function update(dt) {
@@ -413,6 +427,18 @@ function update(dt) {
   state.speed += (acceleration - drag * (state.speed / DRAG_REFERENCE_SPEED)) * dt;
   state.speed = clamp(state.speed, -REVERSE_MAX_SPEED, BASE_MAX_SPEED * state.accelScale);
   state.maxSpeed = Math.max(state.maxSpeed, state.speed);
+
+  // Footstep loop tracks the input flags directly (not state.speed): drag
+  // only decays speed asymptotically toward 0 without ever quite reaching
+  // it, so gating on "speed > 0" would leave the sound looping long after
+  // the key was released.
+  if (state.holdInput || state.reverseInput) {
+    if (runningSound.paused) {
+      runningSound.play().catch(() => {});
+    }
+  } else if (!runningSound.paused) {
+    runningSound.pause();
+  }
 
   // No floor at 0: you can walk backward past the start line for a longer
   // running start. Negative traveled shrinks the wall further (see
